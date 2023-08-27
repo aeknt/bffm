@@ -1,0 +1,552 @@
+#!/bin/bash
+bffm_version="0.1"
+
+source buffermaker
+## Example of buffermaker tui program
+
+file_faces=(
+	dir "$(:weight bold :foreground blue)"
+	exec "$(:weight bold :foreground green)"
+	symlink "$(:weight bold :foreground cyan)"
+	unreadable "$(:foreground gray)"
+	char "$(:weight bold :background black :foreground yellow)"
+	socket "$(:weight bold :foreground magenta)"
+)
+load-theme file_faces
+
+add-mode dialog
+	:: '[left]' format-left
+	:: '[up]' format-up
+	:: '[right]' format-right
+	:: '[down]' format-down
+	:: 'RET' link-enter
+	:: "$(kbd C-c)" 'die'
+	mode-options
+		:: else :
+		:: disable-global 1
+
+# dialog buffer, bf_1
+declare-new-buffer
+	:: line 1
+	:: column 0
+	:: mode dialog
+	:: menuline-function dialog-filename
+	:: syntax syntax-format
+	:: syntax-exec 1
+	:: size-x 32
+	:: size-y 0
+
+add-mode bffm
+	:: '[up]' previous-file
+	:: '[down]' next-file
+	:: '[left]' dir-up
+	:: '[right]' open
+	:: 'RET' open
+	:: '[next]' 'scroll-down'
+	:: '[prior]' 'scroll-up'
+	:: "$(kbd C-c)" 'die'
+	:: "$(kbd h)" toggle-hidden
+	:: "$(kbd r)" remove
+	:: "$(kbd a)" set-dir
+	:: "$(kbd p)" pinned
+	:: "$(kbd M-a)" menu-action
+	:: "$(kbd M-m)" menu-modify
+	:: 'ESC' menubf
+	:: "$(kbd i)" file-info
+	mode-options
+		:: else return
+		:: disable-global 1
+		
+# file list buffer, bf_2
+declare-new-buffer
+	:: line 1
+	:: column 0
+	:: mode bffm
+	:: syntax syntax-bffm
+	:: loc-y 3
+
+add-mode pinned
+	:: '[up]' previous-line
+	:: '[down]' next-line
+	:: '[right]' return-file
+	:: 'RET' pinned-select
+	:: '[next]' 'scroll-down'
+	:: '[prior]' 'scroll-up'
+	:: "$(kbd C-c)" 'die'
+	mode-options
+		:: else return
+		:: disable-global 1
+	
+# pinned list buffer, bf_3
+declare-new-buffer
+	:: line 1
+	:: column 0
+	:: mode pinned
+	:: syntax syntax-bffm
+	:: loc-x 1
+	:: loc-y 3
+
+source "${HOME}/.config/user-dirs.dirs"
+
+# status bar buffer, bf_4
+declare-new-buffer
+	:: line 1
+	:: column 0
+	:: mode empty
+	:: syntax syntax-status
+	:: size-y 0
+	:: loc-x 1
+	:: loc-y 2
+
+buffer=(
+	''
+	"$PWD"
+)
+
+# info bar buffer, bf_5
+declare-new-buffer
+	:: line 1
+	:: column 0
+	:: mode empty
+	:: syntax syntax-format
+	:: syntax-exec 1
+	:: size-y 0
+	:: loc-x 1
+
+buffer=(
+	''
+	'<f> dim ESC to focus menu M-<key> for menu item </f>'
+)
+
+add-mode info
+	:: '[left]' format-left
+	:: '[up]' format-up
+	:: '[right]' format-right
+	:: '[down]' format-down
+	:: 'RET' link-enter
+	:: "$(kbd n)" 'info-next'
+	:: "$(kbd p)" 'info-previous'
+	:: "$(kbd q)" 'info-quit'
+	:: "$(kbd C-c)" 'die'
+	mode-options
+		:: else :
+		:: disable-global 1
+
+# file info buffer, bf_6
+declare-new-buffer
+	:: line 1
+	:: column 0
+	:: mode info
+	:: syntax syntax-format
+	:: syntax-exec 1
+	:: loc-y 3
+
+# menuline buffer, bf_7
+declare-new-buffer
+	:: line 1
+	:: column 0
+	:: mode menuline
+	:: syntax syntax-format
+	:: syntax-exec 1
+	:: loc-y 1
+	:: loc-x 1
+	:: size-y 0
+
+buffer[0]=''
+buffer[1]=\
+'<o> id: action select: menu-action up: : right: obj modify left: : text: '\
+'<f> hint <f> hint-highlight A </f-> ction </f> </o> '\
+'<o> id: modify select: menu-modify up: : right: obj open left: obj action text: '\
+'<f> hint <f> hint-highlight M </f-> odify </f> </o> '\
+'<o> id: open select: die up: : right: obj view left: obj modify text: '\
+'<f> hint <f> hint-highlight O </f-> pen </f> </o> '\
+'<o> id: view select: die up: : right: obj help left: obj open text: '\
+'<f> hint <f> hint-highlight V </f-> iew </f> </o> '\
+'<o> id: help select: die up: : right: : left: obj view text: '\
+'<f> hint <f> hint-highlight H </f-> elp </f> </o>'
+
+add-mode menuline
+	:: '[left]' format-left
+	:: '[up]' format-up
+	:: '[right]' format-right
+	:: '[down]' return-file
+	:: 'RET' link-enter
+	:: "$(kbd C-c)" 'die'
+	mode-options
+		:: else :
+
+function menubf {
+	set-buffer bf_7
+	obj action
+	redraw-cursor
+}
+
+# menu buffer, bf_8
+declare-new-buffer
+	:: line 1
+	:: column 0
+	:: mode menu
+	:: syntax syntax-format
+	:: syntax-exec 1
+	:: loc-y 1
+	:: loc-x 1
+	:: size-y 1
+	:: size-x 1
+
+add-mode menu
+	:: '[left]' format-left
+	:: '[up]' format-up
+	:: '[right]' format-right
+	:: '[down]' format-down
+	:: 'RET' link-enter
+	:: "$(kbd C-c)" 'die'
+	mode-options
+		:: else :
+		:: disable-global 1
+
+function quit-menu {
+	printf "${faces_raw[default]}"
+	change-size-screen
+}
+function return-menu {
+	printf "${faces_raw[default]}"
+	change-size-screen
+	menubf
+}
+function menu-dir {
+	printf "${faces_raw[default]}"
+	change-size-screen
+	set-dir
+}
+
+function menu-action {
+	set-buffer bf_8
+	buffer=(
+		''
+		'<o> id: quit select: die up: return-menu down: obj goto right: : left: : text: <f> menu <f> menu-highlight Q </f-> uit </f> </o>'
+		'<o> id: goto select: menu-dir up: obj quit down: quit-menu right: : left: : text: <f> menu <f> menu-highlight G </f-> oto </f> </o>'
+	)
+	bf_d[size-x]='4'
+	bf_d[size-y]=$((${#buffer[@]} - 2))
+	redraw
+	redraw-cursor
+}
+function menu-modify {
+	set-buffer bf_8
+	buffer=(
+		''
+		'<o> id: delete select: die up: return-menu down: menu-quit right: : left: : text: <f> menu <f> menu-highlight D </f-> elete </f> </o>'
+		'TODO'
+		'TODO'
+		'TODO'
+		'TODO'
+		'TODO'
+		'TODO'
+		'TODO'
+		'TODO'
+	)
+	bf_d[size-x]='6'
+	bf_d[size-y]=$((${#buffer[@]} - 2))
+	redraw
+	redraw-cursor
+}
+
+function file-info {
+	local file="${buffer[bf_d[line]]}"
+	set-buffer bf_6
+	clear-buffer
+	get-file-info "$file"
+	redraw
+	obj quit
+}
+function get-file-info {
+	buffer=(
+		''
+'<o> id: next select: info-next up: : left: : right: obj previous text: <f> button <f> link N </f-> ext </f> </o> '\
+'<o> id: previous select: info-previous up: : left: obj next right: obj quit text: <f> button <f> link P </f-> revious </f> </o> '\
+'<o> id: quit select: info-quit up: : left: obj previous right: : text: <f> button <f> link Q </f-> uit </f> </o>'
+		''
+		"<f> title $1 </f>"
+		''
+		"<-> $(file -b "$1")"
+		''
+		"size <f> title $(du -h "$1" | cut -f1) </f>"
+		"lines <f> title $(wc -l < "$1") </f> words <f> title $(wc -w < "$1") </f> chars <f> title $(wc -m < "$1") </f>"
+		"owner <f> title $(stat -c %U "$1") </f> (group <f> title $(stat -c %G "$1") <-f> default ) </f> </f>"
+		"permissions <f> title $(stat -c %A "$1") </f>"
+		''
+		"created at $(stat -c %w "$1")"
+		"last access at $(stat -c %x "$1")"
+		"last modifiction $(stat -c %y "$1")"
+		"last status change $(stat -c %z "$1")"
+		''
+	)
+	[ -b "$1" ] && buffer+=("<f> dim block special </f>")
+	[ -c "$1" ] && buffer+=("<f> dim char special </f>")
+	[ -e "$1" ] && buffer+=("<f> dim exists </f>")
+	[ -d "$1" ] && buffer+=("<f> dim dir </f>")
+	[ -f "$1" ] && buffer+=("<f> dim regular </f>")
+	[ -g "$1" ] && buffer+=("<f> dim set-group-ID </f>")
+	[ -G "$1" ] && buffer+=("<f> dim owner by effective group-ID </f>")
+	[ -L "$1" ] && buffer+=("<f> dim symlink")
+	[ -k "$1" ] && buffer+=("<f> dim sticky")
+	[ -O "$1" ] && buffer+=("<f> dim owned by effective user-id </f>")
+	[ -p "$1" ] && buffer+=("<f> dim named pipe </f>")
+	[ -r "$1" ] && buffer+=("<f> dim read permission </f>")
+	[ -s "$1" ] && buffer+=("<f> dim size greater 0 </f>")
+	[ -S "$1" ] && buffer+=("<f> dim socket </f>")
+	[ -u "$1" ] && buffer+=("<f> dim set-user-ID </f>")
+	[ -w "$1" ] && buffer+=("<f> dim write permission granted </f>")
+	[ -x "$1" ] && buffer+=("<f> dim execute/search granted </f>")
+	
+}
+function info-next {
+	set-buffer bf_2
+	next-file
+	file-info
+}
+function info-previous {
+	set-buffer bf_2
+	previous-file
+	file-info
+}
+function info-quit {
+	set-buffer bf_2
+	redraw
+}
+
+
+function syntax-status {
+	set-face title
+}
+
+function set-dir {
+	local dir
+	stty echo
+	read-command ': ' dir "$PWD"
+	stty -echo
+	display-dir "$dir"
+}
+
+function display-dir {
+	IFS=$'\n'
+	clear-buffer
+	cd "$1" || cd .
+	set-buffer bf_4
+	buffer[1]="$PWD"
+	unset bf_s[1]
+	redraw
+	set-buffer bf_2
+	mapfile -t -O 1 buffer <<< "$(list-directory)"
+	[ -z "${buffer[bf_d[line]]}" ] && bf_d[line]=1
+	redraw
+}
+
+function open {
+	file="${buffer[bf_d[line]]}"
+	[ -d "$file" ] && { display-dir "$file"; return; }
+	[ -f "$file" ] && {
+		case "$file" in
+			*".png")
+				imv "$file" > /dev/null
+				;;
+			*)
+				stty echo
+				$EDITOR "$file"
+				stty -echo
+				set-buffer bf_5; redraw
+				set-buffer bf_4; redraw
+				set-buffer bf_3; redraw
+				set-buffer bf_2; redraw
+		esac
+		return
+	}
+}
+function dir-up {
+	display-dir ..
+}
+
+function toggle-hidden {
+	((hidden==0)) && hidden=1 || hidden=0
+	display-dir
+}
+
+function next-file {
+	move-next-line
+	redraw-cursor
+	redraw-info
+	redraw-cursor
+}
+function previous-file {
+	move-previous-line
+	redraw-cursor
+	redraw-info
+	redraw-cursor
+}
+function redraw-info {
+	local file="${buffer[bf_d[line]]}"
+	set-buffer bf_5
+	buffer[1]="<f> title $file </f> "
+	[ -n "$file" ] && {
+		[ -f "$file" ] && buffer[1]+="$(du -h "$file" | cut -f1)"
+		[ -d "$file" ] && buffer[1]+="<f> dir $(cd "$file" && list-directory | wc -l) </f>"
+	}
+	unset bf_s[1]
+	redraw
+	set-buffer bf_2
+}
+
+function syntax-bffm {
+	set-face default
+	[ -x "$word" ] && set-face exec
+	[ -d "$word" ] && set-face dir
+	[ -L "$word" ] && set-face symlink
+	[ -c "$word" ] && set-face char
+	[ -S "$word" ] && set-face socket
+}
+
+function dialog {
+	((tmpx=bf_d[column] + bf_d[loc-x],
+	  tmpy=bf_d[line] + bf_d[loc-y] - 1))
+	set-buffer bf_1
+	clear-buffer
+	bf_d[info]="$1"
+	bf_d[menu-size-x]="${#1}"
+	((bf_d[loc-x]=tmpx,
+	  bf_d[loc-y]=tmpy))
+	options[menu-line]=1
+	buffer[0]=''
+	buffer[1]="<f> hint $2 : </f> "
+	buffer[1]+='<o> id: return select: dialog-return up: : down: : right: obj yes left: : '
+	buffer[1]+='text: <f> link No </f> </o> '
+	buffer[1]+="<o> id: yes select: $3 up: : down: : right: obj no left: obj return "
+	buffer[1]+='text: <f> link Yes </f> </o>'
+	redraw
+	obj return
+}
+
+function dialog-filename {
+	printf "\e[0m\e[%s;%sH%b\e[?25l%*s\r"\
+		   "${bf_d[loc-y]}"\
+		   "${bf_d[loc-x]}"\
+		   "${faces[menu]}"\
+		   "${bf_d[menu-size-x]}"\
+		   ''
+	printf '\e[%sG%s\e[0m\n' "${bf_d[loc-x]}" "${bf_d[info]}"
+}
+
+function dialog-return {
+	set-buffer bf_2
+	options[menu-line]=0
+	redraw
+}
+
+function remove {
+	dialog "${buffer[bf_d[line]]}" 'Move to /tmp/trash?' remove-file
+}
+function remove-file {
+	set-buffer bf_2
+	options[menu-line]=0
+	mv "${buffer[bf_d[line]]}" /tmp/trash/
+	display-dir .
+}
+
+function pinned {
+	set-buffer bf_3
+	redraw-cursor
+}
+function pinned-select {
+	local item="${buffer[bf_d[line]]}"
+	[ -d "$item" ] || return
+	set-buffer bf_2
+	if [ "$item" != "$PWD" ]; then
+		display-dir "$item"
+	else
+		redraw
+	fi
+}
+function return-file {
+	set-buffer bf_2
+	redraw
+}
+
+set-buffer bf_3
+buffer=(
+	''
+	'/'
+	"$HOME"
+	"$XDG_DESKTOP_DIR"
+	"$XDG_DOCUMENTS_DIR"
+	"$XDG_DOWNLOAD_DIR"
+	"$XDG_MUSIC_DIR"
+	"$XDG_PICTURES_DIR"
+	"$XDG_TEMPLATES_DIR"
+	"$XDG_VIDEOS_DIR"
+	"/mnt"
+	"/etc"
+	"/usr"
+	"/media"
+)
+length=14
+for item in "${buffer[@]}"; do
+	((length<${#item})) && length=${#item}
+done
+length=$((length+2))
+bf_d[size-x]="$length"
+
+stty -echo
+on_die='cleanup'
+function cleanup {
+	stty echo
+}
+
+function change-size-screen {
+	shopt -s checkwinsize && (:) # WHY THIS HAS TO BE HERE!!?
+	
+	set-buffer bf_7
+	bf_d[size-x]=$COLUMNS
+	redraw
+
+	set-buffer bf_4
+	bf_d[size-x]=$COLUMNS
+	redraw
+	
+	set-buffer bf_2
+	bf_d[size-y]=$((LINES-4))
+	
+	set-buffer bf_3
+	length=14
+	for item in "${buffer[@]}"; do
+		((length<${#item})) && length=${#item}
+	done
+	length=$((length+2))
+	bf_d[size-x]="$length"
+	bf_d[size-y]=$((LINES-4))
+	redraw
+	
+	set-buffer bf_2
+	((bf_d[loc-x]=length))
+	((bf_d[size-x]=COLUMNS-length))
+	
+	set-buffer bf_5
+	bf_d[size-x]=$COLUMNS
+	bf_d[loc-y]=$LINES
+	redraw
+
+	set-buffer bf_6
+	bf_d[size-x]=$((COLUMNS/2))
+	bf_d[size-y]=$((LINES-4))
+	bf_d[loc-x]=$((COLUMNS/2))
+					  
+	set-buffer bf_2
+	redraw
+}
+
+[ -d /tmp/trash/ ] || mkdir /tmp/trash
+
+load-default-config
+
+init-var
+change-size-screen
+display-dir "${1:-.}"
+main
