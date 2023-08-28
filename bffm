@@ -1,5 +1,5 @@
 #!/bin/bash
-bffm_version="0.1"
+bffm_version="0.2"
 
 source buffermaker
 ## Example of buffermaker tui program
