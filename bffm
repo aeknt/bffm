@@ -1,5 +1,5 @@
 #!/bin/bash
-bffm_version="0.2"
+bffm_version="0.3"
 
 source buffermaker
 ## Example of buffermaker tui program
@@ -18,8 +18,9 @@ file_faces=(
 	archive "$(:weight bold :foreground )"
 	text "$(:weight bold :foreground light-magenta)"
 	
-	info-line "$(:background yellow :foreground black)"
-	info-line-title "$(:weight bold :background yellow :foreground black)"
+	info-line "$(:mode inverse :foreground red)"
+	info-line-title "$(:mode inverse :foreground light-red)"
+	status-line "$(:mode inverse :weight bold :foreground red)"
 )
 load-theme file_faces
 
@@ -60,7 +61,6 @@ add-mode bffm
 	:: "$(kbd p)" pinned
 	:: "$(kbd M-a)" menu-action
 	:: "$(kbd M-m)" menu-modify
-	:: 'ESC' menubf
 	:: "$(kbd i)" file-info
 	mode-options
 		:: else return
@@ -140,7 +140,7 @@ declare-new-buffer
 
 buffer=(
 	''
-	'<f> info-line ESC to focus menu M-<key> for menu item </f>'
+	"<f> info-line Bffm $bffm_version BufferMaker $buffermaker_version </f>"
 )
 
 add-mode info
@@ -186,7 +186,10 @@ function get-file-info {
 		"<-> $(file -b "$1")"
 		''
 		"size <f> title $(du -h "$1" | cut -f1) </f>"
-		"lines <f> title $(wc -l < "$1") </f> words <f> title $(wc -w < "$1") </f> chars <f> title $(wc -m < "$1") </f>"
+	)
+	[ -f "$file" ] &&
+		buffer+=("lines <f> title $(wc -l < "$1") </f> words <f> title $(wc -w < "$1") </f> chars <f> title $(wc -m < "$1") </f>")
+	buffer+=(
 		"owner <f> title $(stat -c %U "$1") </f> (group <f> title $(stat -c %G "$1") <-f> default ) </f> </f>"
 		"permissions <f> title $(stat -c %A "$1") </f>"
 		''
@@ -232,7 +235,7 @@ function info-quit {
 
 
 function syntax-status {
-	set-face title
+	set-face status-line
 }
 
 function set-dir {
@@ -250,34 +253,52 @@ function display-dir {
 	set-buffer bf_4
 	buffer[1]="$PWD"
 	unset bf_s[1]
-	redraw
+ 	redraw
 	set-buffer bf_2
 	mapfile -t -O 1 buffer <<< "$(list-directory)"
 	[ -z "${buffer[bf_d[line]]}" ] && bf_d[line]=1
 	redraw
 }
 
+# stolen from fff
+get-mime-type() {
+	# Get a file's mime_type.
+	mime_type=$(file "-${file_flags:-biL}" "$1" 2>/dev/null)
+}
 function open {
 	file="${buffer[bf_d[line]]}"
-	[ -d "$file" ] && { display-dir "$file"; return; }
-	[ -f "$file" ] && {
-		case "$file" in
-			*'.png'|*'.jpg')
-				${options[image-viewer]} "$file" > /dev/null
-				;;
-			*)
+	# Open directories and files.
+	if [[ -d "$file" ]]; then
+		display-dir "$file"; return;
+	elif [[ -f "$file" ]]; then
+		# Figure out what kind of file we're working with.
+		get-mime-type "$file"
+
+		# Open all text-based files in '$EDITOR'.
+		# Everything else goes through 'xdg-open'/'open'.
+		case "$mime_type" in
+			text/*|*x-empty*|*json*)
+				clear-screen
 				stty echo
-				read-command 'command to open: ' command
-				$command
+				"${VISUAL:-${EDITOR:-vi}}" "$file"
 				stty -echo
 				set-buffer bf_5; redraw
 				set-buffer bf_4; redraw
 				set-buffer bf_3; redraw
 				set-buffer bf_2; redraw
+				;;
+
+			*)
+				# 'nohup':  Make the process immune to hangups.
+				# '&':      Send it to the background.
+				# 'disown': Detach it from the shell.
+				nohup "${options[opener]:-${opener:-xdg-open}}" "$file" &>/dev/null &
+				disown
 		esac
-		return
-	}
+	fi
 }
+
+
 function dir-up {
 	display-dir ..
 }
@@ -288,24 +309,35 @@ function toggle-hidden {
 }
 
 function next-file {
+	((bf_d[line]>=${#buffer[@]})) && return
+	#printf '\e[?25l'
+	#print-buffer-line
 	move-next-line
-	redraw-cursor
 	redraw-info
 	redraw-cursor
+	#printf "%b%s" "${faces[menu]}" "${buffer[bf_d[line]]}"
+	#redraw-cursor-line
+	#printf '\e[?25l'
 }
 function previous-file {
+	#printf '\e[?25l'
+	#print-buffer-line
 	move-previous-line
-	redraw-cursor
 	redraw-info
 	redraw-cursor
+	#printf "%b%s" "${faces[menu]}" "${buffer[bf_d[line]]}"
+	#redraw-cursor-line
+	#printf '\e[?25l'
 }
 function redraw-info {
 	local file="${buffer[bf_d[line]]}"
+	local -i total=${#buffer[@]}
+	local -i index=${bf_d[line]}
 	set-buffer bf_5
-	buffer[1]="<f> info-line-title $file </f> "
+	buffer[1]="<f> info-line ${index}/${total} </f> <f> info-line-title $file </f> "
 	[ -n "$file" ] && {
 		[ -f "$file" ] && buffer[1]+="<f> info-line $(du -h "$file" | cut -f1) </f>"
-		[ -d "$file" ] && buffer[1]+="<f> info-line [$(cd "$file" && list-directory | wc -l)] </f>"
+		[ -d "$file" ] && buffer[1]+="<-f> info-line /($(cd "$file" && list-directory | wc -l)) </f>"
 	}
 	unset bf_s[1]
 	redraw
@@ -413,7 +445,7 @@ function change-size-screen {
 	
 	set-buffer bf_4
 	bf_d[size-x]=$COLUMNS
-	redraw
+#	redraw
 	
 	set-buffer bf_2
 	bf_d[size-y]=$((LINES-4))
