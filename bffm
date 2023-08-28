@@ -20,7 +20,8 @@ file_faces=(
 	
 	info-line "$(:mode inverse :foreground red)"
 	info-line-title "$(:mode inverse :foreground light-red)"
-	status-line "$(:mode inverse :weight bold :foreground red)"
+	status-line "$(:mode inverse :foreground red)"
+	file-selected "$(:mode inverse :foreground red)"
 )
 load-theme file_faces
 
@@ -127,22 +128,6 @@ buffer=(
 	"$PWD"
 )
 
-# info bar buffer, bf_5
-declare-new-buffer
-	:: line 1
-	:: column 0
-	:: mode empty
-	:: syntax syntax-format
-	:: syntax-exec 1
-	:: size-y 0
-	:: loc-x 1
-	:: background info-line
-
-buffer=(
-	''
-	"<f> info-line Bffm $bffm_version BufferMaker $buffermaker_version </f>"
-)
-
 add-mode info
 	:: '[left]' format-left
 	:: '[up]' format-up
@@ -157,7 +142,7 @@ add-mode info
 		:: else :
 		:: disable-global 1
 
-# file info buffer, bf_6
+# file info buffer, bf_5
 declare-new-buffer
 	:: line 1
 	:: column 0
@@ -168,7 +153,7 @@ declare-new-buffer
 
 function file-info {
 	local file="${buffer[bf_d[line]]}"
-	set-buffer bf_6
+	set-buffer bf_5
 	clear-buffer
 	get-file-info "$file"
 	redraw
@@ -257,7 +242,11 @@ function display-dir {
 	set-buffer bf_2
 	mapfile -t -O 1 buffer <<< "$(list-directory)"
 	[ -z "${buffer[bf_d[line]]}" ] && bf_d[line]=1
+	redraw-info
 	redraw
+	printf "%b%s" "${faces[file-selected]}" "${buffer[bf_d[line]]}"
+	redraw-cursor-line
+	printf '\e[?25l'
 }
 
 # stolen from fff
@@ -282,7 +271,6 @@ function open {
 				stty echo
 				"${VISUAL:-${EDITOR:-vi}}" "$file"
 				stty -echo
-				set-buffer bf_5; redraw
 				set-buffer bf_4; redraw
 				set-buffer bf_3; redraw
 				set-buffer bf_2; redraw
@@ -310,38 +298,45 @@ function toggle-hidden {
 
 function next-file {
 	((bf_d[line]>=${#buffer[@]})) && return
-	#printf '\e[?25l'
-	#print-buffer-line
+	printf '\e[?25l'
+	print-buffer-line
 	move-next-line
 	redraw-info
 	redraw-cursor
-	#printf "%b%s" "${faces[menu]}" "${buffer[bf_d[line]]}"
-	#redraw-cursor-line
-	#printf '\e[?25l'
+	printf "%b%s" "${faces[file-selected]}" "${buffer[bf_d[line]]}"
+	redraw-cursor-line
+	printf '\e[?25l'
 }
 function previous-file {
-	#printf '\e[?25l'
-	#print-buffer-line
+	((bf_d[line]<=1)) && return
+	printf '\e[?25l'
+	print-buffer-line
 	move-previous-line
 	redraw-info
 	redraw-cursor
-	#printf "%b%s" "${faces[menu]}" "${buffer[bf_d[line]]}"
-	#redraw-cursor-line
-	#printf '\e[?25l'
+	printf "%b%s" "${faces[file-selected]}" "${buffer[bf_d[line]]}"
+	redraw-cursor-line
+	printf '\e[?25l'
 }
+
 function redraw-info {
 	local file="${buffer[bf_d[line]]}"
 	local -i total=${#buffer[@]}
 	local -i index=${bf_d[line]}
-	set-buffer bf_5
-	buffer[1]="<f> info-line ${index}/${total} </f> <f> info-line-title $file </f> "
-	[ -n "$file" ] && {
-		[ -f "$file" ] && buffer[1]+="<f> info-line $(du -h "$file" | cut -f1) </f>"
-		[ -d "$file" ] && buffer[1]+="<-f> info-line /($(cd "$file" && list-directory | wc -l)) </f>"
-	}
-	unset bf_s[1]
-	redraw
-	set-buffer bf_2
+	local size
+	[ -f "$file" ] && size="$(du -h "$file" | cut -f1)"
+	[ -d "$file" ] && size="/($(cd "$file" 2> /dev/null && list-directory | wc -l))"
+	printf '\e[%d;%dH%b%*s\r%s %b%s%b %s\e[m'\
+		   $LINES\
+		   0\
+		   "${faces[info-line]}"\
+		   $COLUMNS\
+		   ''\
+		   "${index}/${total}"\
+		   "${faces[info-line-title]}"\
+		   "$file"\
+		   "${faces[info-line]}"\
+		   "$size"
 }
 
 function syntax-bffm {
@@ -448,7 +443,7 @@ function change-size-screen {
 #	redraw
 	
 	set-buffer bf_2
-	bf_d[size-y]=$((LINES-4))
+	bf_d[size-y]=$((LINES-3))
 	bf_d[loc-y]=2
 	
 	set-buffer bf_3
@@ -458,7 +453,7 @@ function change-size-screen {
 	done
 	length=$((length+2))
 	bf_d[size-x]="$length"
-	bf_d[size-y]=$((LINES-4))
+	bf_d[size-y]=$((LINES-3))
 	bf_d[loc-y]=2
 	redraw
 	
@@ -467,13 +462,8 @@ function change-size-screen {
 	((bf_d[size-x]=COLUMNS-length))
 	
 	set-buffer bf_5
-	bf_d[size-x]=$COLUMNS
-	bf_d[loc-y]=$LINES
-	redraw
-
-	set-buffer bf_6
 	bf_d[size-x]=$((COLUMNS/2))
-	bf_d[size-y]=$((LINES-4))
+	bf_d[size-y]=$((LINES-3))
 	bf_d[loc-x]=$((COLUMNS/2))
 	bf_d[loc-y]=2
 					  
@@ -484,9 +474,6 @@ function change-size-screen {
 [ -d /tmp/trash/ ] || mkdir /tmp/trash
 
 load-default-config
-options+=(
-	[image-viewer]=imv
-)
 
 init-var
 change-size-screen
