@@ -1,5 +1,5 @@
 #!/bin/bash
-bffm_version="0.3"
+bffm_version="0.3.2"
 
 source buffermaker
 ## Example of buffermaker tui program
@@ -21,7 +21,10 @@ file_faces=(
 	info-line "$(:mode inverse :foreground red)"
 	info-line-title "$(:mode inverse :foreground light-red)"
 	status-line "$(:mode inverse :foreground red)"
-	file-selected "$(:mode inverse :foreground red)"
+	file-focus "$(:mode inverse :foreground red)"
+	file-select "$(:mode inverse :foreground light-red)"
+
+	dialog "$(:mode inverse :foreground red)"
 )
 load-theme file_faces
 
@@ -41,10 +44,8 @@ declare-new-buffer
 	:: line 1
 	:: column 0
 	:: mode dialog
-	:: menuline-function dialog-filename
 	:: syntax syntax-format
 	:: syntax-exec 1
-	:: size-x 32
 	:: size-y 0
 
 add-mode bffm
@@ -57,11 +58,9 @@ add-mode bffm
 	:: '[prior]' 'scroll-up'
 	:: "$(kbd C-c)" 'die'
 	:: "$(kbd h)" toggle-hidden
-	:: "$(kbd r)" remove
+	:: "$(kbd d)" remove
 	:: "$(kbd a)" set-dir
 	:: "$(kbd p)" pinned
-	:: "$(kbd M-a)" menu-action
-	:: "$(kbd M-m)" menu-modify
 	:: "$(kbd i)" file-info
 	mode-options
 		:: else return
@@ -244,7 +243,7 @@ function display-dir {
 	[ -z "${buffer[bf_d[line]]}" ] && bf_d[line]=1
 	redraw-info
 	redraw
-	printf "%b%s" "${faces[file-selected]}" "${buffer[bf_d[line]]}"
+	printf "%b%s" "${faces[file-focus]}" "${buffer[bf_d[line]]}"
 	redraw-cursor-line
 	printf '\e[?25l'
 }
@@ -296,27 +295,27 @@ function toggle-hidden {
 	display-dir
 }
 
+function redraw-file-buffer {
+	redraw-info
+	redraw-cursor
+	printf "%b%s" "${faces[file-focus]}" "${buffer[bf_d[line]]}"
+	redraw-cursor-line
+	printf '\e[?25l'
+}
+
 function next-file {
 	((bf_d[line]>=${#buffer[@]})) && return
 	printf '\e[?25l'
 	print-buffer-line
 	move-next-line
-	redraw-info
-	redraw-cursor
-	printf "%b%s" "${faces[file-selected]}" "${buffer[bf_d[line]]}"
-	redraw-cursor-line
-	printf '\e[?25l'
+	redraw-file-buffer
 }
 function previous-file {
 	((bf_d[line]<=1)) && return
 	printf '\e[?25l'
 	print-buffer-line
 	move-previous-line
-	redraw-info
-	redraw-cursor
-	printf "%b%s" "${faces[file-selected]}" "${buffer[bf_d[line]]}"
-	redraw-cursor-line
-	printf '\e[?25l'
+	redraw-file-buffer
 }
 
 function redraw-info {
@@ -360,43 +359,35 @@ function dialog {
 	  tmpy=bf_d[line] + bf_d[loc-y] - 1))
 	set-buffer bf_1
 	clear-buffer
-	bf_d[info]="$1"
-	bf_d[menu-size-x]="${#1}"
 	((bf_d[loc-x]=tmpx,
-	  bf_d[loc-y]=tmpy))
-	options[menu-line]=1
+	  bf_d[loc-y]=tmpy,
+	  bf_d[size-x]=${#1} + ${#2} + 5 + 4,
+	  bf_d[column]=0
+	))
+	
 	buffer[0]=''
-	buffer[1]="<f> hint $2 : </f> "
-	buffer[1]+='<o> id: return select: dialog-return up: : down: : right: obj yes left: : '
-	buffer[1]+='text: <f> link No </f> </o> '
-	buffer[1]+="<o> id: yes select: $3 up: : down: : right: obj no left: obj return "
-	buffer[1]+='text: <f> link Yes </f> </o>'
+	buffer[1]="<f> file-select $1 </f> "
+	buffer[1]+="<-f> dialog  $2 "
+	buffer[1]+="<o> id: yes select: $3 up: : down: : left: obj no right: obj return "
+	buffer[1]+='text: Yes </o> '
+	buffer[1]+='<o> id: return select: dialog-return up: : down: : left: obj yes right: : '
+	buffer[1]+='text: No </o> </f>'
+
 	redraw
 	obj return
 }
 
-function dialog-filename {
-	printf "\e[0m\e[%s;%sH%b\e[?25l%*s\r"\
-		   "${bf_d[loc-y]}"\
-		   "${bf_d[loc-x]}"\
-		   "${faces[menu]}"\
-		   "${bf_d[menu-size-x]}"\
-		   ''
-	printf '\e[%sG%s\e[0m\n' "${bf_d[loc-x]}" "${bf_d[info]}"
-}
-
 function dialog-return {
 	set-buffer bf_2
-	options[menu-line]=0
 	redraw
+	redraw-file-buffer
 }
 
 function remove {
-	dialog "${buffer[bf_d[line]]}" 'Move to /tmp/trash?' remove-file
+	dialog "${buffer[bf_d[line]]}" 'Trash?' remove-file
 }
 function remove-file {
 	set-buffer bf_2
-	options[menu-line]=0
 	mv "${buffer[bf_d[line]]}" /tmp/trash/
 	display-dir .
 }
@@ -452,7 +443,7 @@ function change-size-screen {
 		((length<${#item})) && length=${#item}
 	done
 	length=$((length+2))
-	bf_d[size-x]="$length"
+	bf_d[size-x]=$((length-1))
 	bf_d[size-y]=$((LINES-3))
 	bf_d[loc-y]=2
 	redraw
