@@ -11,6 +11,15 @@ file_faces=(
 	unreadable "$(:foreground gray)"
 	char "$(:weight bold :background black :foreground yellow)"
 	socket "$(:weight bold :foreground magenta)"
+
+	image "$(:weight bold :foreground magenta)"
+	video "$(:weight bold :foreground light-magenta)"
+	audio "$(:foreground cyan)"
+	archive "$(:weight bold :foreground )"
+	text "$(:weight bold :foreground light-magenta)"
+	
+	info-line "$(:background yellow :foreground black)"
+	info-line-title "$(:weight bold :background yellow :foreground black)"
 )
 load-theme file_faces
 
@@ -63,7 +72,6 @@ declare-new-buffer
 	:: column 0
 	:: mode bffm
 	:: syntax syntax-bffm
-	:: loc-y 3
 
 add-mode pinned
 	:: '[up]' previous-line
@@ -84,9 +92,25 @@ declare-new-buffer
 	:: mode pinned
 	:: syntax syntax-bffm
 	:: loc-x 1
-	:: loc-y 3
 
-source "${HOME}/.config/user-dirs.dirs"
+[ -f "${HOME}/.config/user-dirs.dirs" ] && source "${HOME}/.config/user-dirs.dirs"
+buffer=(
+	''
+	'/'
+	"$HOME"
+	"$XDG_DESKTOP_DIR"
+	"$XDG_DOCUMENTS_DIR"
+	"$XDG_DOWNLOAD_DIR"
+	"$XDG_MUSIC_DIR"
+	"$XDG_PICTURES_DIR"
+	"$XDG_TEMPLATES_DIR"
+	"$XDG_VIDEOS_DIR"
+	"/mnt"
+	"/etc"
+	"/usr"
+	"/media"
+)
+
 
 # status bar buffer, bf_4
 declare-new-buffer
@@ -96,7 +120,7 @@ declare-new-buffer
 	:: syntax syntax-status
 	:: size-y 0
 	:: loc-x 1
-	:: loc-y 2
+	:: loc-y 1
 
 buffer=(
 	''
@@ -112,10 +136,11 @@ declare-new-buffer
 	:: syntax-exec 1
 	:: size-y 0
 	:: loc-x 1
+	:: background info-line
 
 buffer=(
 	''
-	'<f> dim ESC to focus menu M-<key> for menu item </f>'
+	'<f> info-line ESC to focus menu M-<key> for menu item </f>'
 )
 
 add-mode info
@@ -139,117 +164,7 @@ declare-new-buffer
 	:: mode info
 	:: syntax syntax-format
 	:: syntax-exec 1
-	:: loc-y 3
 
-# menuline buffer, bf_7
-declare-new-buffer
-	:: line 1
-	:: column 0
-	:: mode menuline
-	:: syntax syntax-format
-	:: syntax-exec 1
-	:: loc-y 1
-	:: loc-x 1
-	:: size-y 0
-
-buffer[0]=''
-buffer[1]=\
-'<o> id: action select: menu-action up: : right: obj modify left: : text: '\
-'<f> hint <f> hint-highlight A </f-> ction </f> </o> '\
-'<o> id: modify select: menu-modify up: : right: obj open left: obj action text: '\
-'<f> hint <f> hint-highlight M </f-> odify </f> </o> '\
-'<o> id: open select: die up: : right: obj view left: obj modify text: '\
-'<f> hint <f> hint-highlight O </f-> pen </f> </o> '\
-'<o> id: view select: die up: : right: obj help left: obj open text: '\
-'<f> hint <f> hint-highlight V </f-> iew </f> </o> '\
-'<o> id: help select: die up: : right: : left: obj view text: '\
-'<f> hint <f> hint-highlight H </f-> elp </f> </o>'
-
-add-mode menuline
-	:: '[left]' format-left
-	:: '[up]' format-up
-	:: '[right]' format-right
-	:: '[down]' return-file
-	:: 'RET' link-enter
-	:: "$(kbd C-c)" 'die'
-	mode-options
-		:: else :
-
-function menubf {
-	set-buffer bf_7
-	obj action
-	redraw-cursor
-}
-
-# menu buffer, bf_8
-declare-new-buffer
-	:: line 1
-	:: column 0
-	:: mode menu
-	:: syntax syntax-format
-	:: syntax-exec 1
-	:: loc-y 1
-	:: loc-x 1
-	:: size-y 1
-	:: size-x 1
-
-add-mode menu
-	:: '[left]' format-left
-	:: '[up]' format-up
-	:: '[right]' format-right
-	:: '[down]' format-down
-	:: 'RET' link-enter
-	:: "$(kbd C-c)" 'die'
-	mode-options
-		:: else :
-		:: disable-global 1
-
-function quit-menu {
-	printf "${faces_raw[default]}"
-	change-size-screen
-}
-function return-menu {
-	printf "${faces_raw[default]}"
-	change-size-screen
-	menubf
-}
-function menu-dir {
-	printf "${faces_raw[default]}"
-	change-size-screen
-	set-dir
-}
-
-function menu-action {
-	set-buffer bf_8
-	buffer=(
-		''
-		'<o> id: quit select: die up: return-menu down: obj goto right: : left: : text: <f> menu <f> menu-highlight Q </f-> uit </f> </o>'
-		'<o> id: goto select: menu-dir up: obj quit down: quit-menu right: : left: : text: <f> menu <f> menu-highlight G </f-> oto </f> </o>'
-	)
-	bf_d[size-x]='4'
-	bf_d[size-y]=$((${#buffer[@]} - 2))
-	redraw
-	redraw-cursor
-}
-function menu-modify {
-	set-buffer bf_8
-	buffer=(
-		''
-		'<o> id: delete select: die up: return-menu down: menu-quit right: : left: : text: <f> menu <f> menu-highlight D </f-> elete </f> </o>'
-		'TODO'
-		'TODO'
-		'TODO'
-		'TODO'
-		'TODO'
-		'TODO'
-		'TODO'
-		'TODO'
-	)
-	bf_d[size-x]='6'
-	bf_d[size-y]=$((${#buffer[@]} - 2))
-	redraw
-	redraw-cursor
-}
 
 function file-info {
 	local file="${buffer[bf_d[line]]}"
@@ -347,12 +262,13 @@ function open {
 	[ -d "$file" ] && { display-dir "$file"; return; }
 	[ -f "$file" ] && {
 		case "$file" in
-			*".png")
-				imv "$file" > /dev/null
+			*'.png'|*'.jpg')
+				${options[image-viewer]} "$file" > /dev/null
 				;;
 			*)
 				stty echo
-				$EDITOR "$file"
+				read-command 'command to open: ' command
+				$command
 				stty -echo
 				set-buffer bf_5; redraw
 				set-buffer bf_4; redraw
@@ -386,10 +302,10 @@ function previous-file {
 function redraw-info {
 	local file="${buffer[bf_d[line]]}"
 	set-buffer bf_5
-	buffer[1]="<f> title $file </f> "
+	buffer[1]="<f> info-line-title $file </f> "
 	[ -n "$file" ] && {
-		[ -f "$file" ] && buffer[1]+="$(du -h "$file" | cut -f1)"
-		[ -d "$file" ] && buffer[1]+="<f> dir $(cd "$file" && list-directory | wc -l) </f>"
+		[ -f "$file" ] && buffer[1]+="<f> info-line $(du -h "$file" | cut -f1) </f>"
+		[ -d "$file" ] && buffer[1]+="<f> info-line [$(cd "$file" && list-directory | wc -l)] </f>"
 	}
 	unset bf_s[1]
 	redraw
@@ -403,6 +319,13 @@ function syntax-bffm {
 	[ -L "$word" ] && set-face symlink
 	[ -c "$word" ] && set-face char
 	[ -S "$word" ] && set-face socket
+	case "$word" in
+		*'.png'|*'.jpg') set-face image;;
+		*'.mp4'|*'.avi'|*.'mkv'|*'.m4v') set-face video;;
+		*'.mp3'|*'.ogg'|*.'wav') set-face audio;;
+		*'.zip'|*'.tar'|*'.rar') set-face archive;;
+		*'.txt'|*'.md') set-face text;;
+	esac
 }
 
 function dialog {
@@ -471,22 +394,6 @@ function return-file {
 }
 
 set-buffer bf_3
-buffer=(
-	''
-	'/'
-	"$HOME"
-	"$XDG_DESKTOP_DIR"
-	"$XDG_DOCUMENTS_DIR"
-	"$XDG_DOWNLOAD_DIR"
-	"$XDG_MUSIC_DIR"
-	"$XDG_PICTURES_DIR"
-	"$XDG_TEMPLATES_DIR"
-	"$XDG_VIDEOS_DIR"
-	"/mnt"
-	"/etc"
-	"/usr"
-	"/media"
-)
 length=14
 for item in "${buffer[@]}"; do
 	((length<${#item})) && length=${#item}
@@ -500,19 +407,17 @@ function cleanup {
 	stty echo
 }
 
+## layout manager
 function change-size-screen {
 	shopt -s checkwinsize && (:) # WHY THIS HAS TO BE HERE!!?
 	
-	set-buffer bf_7
-	bf_d[size-x]=$COLUMNS
-	redraw
-
 	set-buffer bf_4
 	bf_d[size-x]=$COLUMNS
 	redraw
 	
 	set-buffer bf_2
 	bf_d[size-y]=$((LINES-4))
+	bf_d[loc-y]=2
 	
 	set-buffer bf_3
 	length=14
@@ -522,6 +427,7 @@ function change-size-screen {
 	length=$((length+2))
 	bf_d[size-x]="$length"
 	bf_d[size-y]=$((LINES-4))
+	bf_d[loc-y]=2
 	redraw
 	
 	set-buffer bf_2
@@ -537,6 +443,7 @@ function change-size-screen {
 	bf_d[size-x]=$((COLUMNS/2))
 	bf_d[size-y]=$((LINES-4))
 	bf_d[loc-x]=$((COLUMNS/2))
+	bf_d[loc-y]=2
 					  
 	set-buffer bf_2
 	redraw
@@ -545,6 +452,9 @@ function change-size-screen {
 [ -d /tmp/trash/ ] || mkdir /tmp/trash
 
 load-default-config
+options+=(
+	[image-viewer]=imv
+)
 
 init-var
 change-size-screen
