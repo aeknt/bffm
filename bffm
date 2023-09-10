@@ -1,5 +1,5 @@
 #!/bin/bash
-bffm_version="0.3.2"
+bffm_version="0.3.3"
 
 source buffermaker
 ## Example of buffermaker tui program
@@ -39,18 +39,19 @@ add-mode dialog
 		:: else :
 		:: disable-global 1
 
-# dialog buffer, bf_1
-declare-new-buffer
+# dialog buffer
+declare-buffer dialog
 	:: line 1
 	:: column 0
 	:: mode dialog
 	:: syntax syntax-format
 	:: syntax-exec 1
-	:: size-y 0
+	:: render-type per-char
+	:: size-y 1
 
 add-mode bffm
-	:: '[up]' previous-file
-	:: '[down]' next-file
+	:: '[up]' previous-line
+	:: '[down]' next-line
 	:: '[left]' dir-up
 	:: '[right]' open
 	:: 'RET' open
@@ -66,12 +67,19 @@ add-mode bffm
 		:: else return
 		:: disable-global 1
 		
-# file list buffer, bf_2
-declare-new-buffer
-	:: line 1
-	:: column 0
-	:: mode bffm
-	:: syntax syntax-bffm
+# file list buffer
+declare-buffer files
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=bffm
+	[syntax]=syntax-bffm
+)
+bf_h=(
+	[pre-move]='print-buffer-line'
+	[redraw.cursor pre-redraw]='redraw-info'
+	[redraw.cursor post-redraw]='highlight-selected'
+)
 
 add-mode pinned
 	:: '[up]' previous-line
@@ -85,8 +93,8 @@ add-mode pinned
 		:: else return
 		:: disable-global 1
 	
-# pinned list buffer, bf_3
-declare-new-buffer
+# pinned list buffer
+declare-buffer pinned
 	:: line 1
 	:: column 0
 	:: mode pinned
@@ -112,13 +120,13 @@ buffer=(
 )
 
 
-# status bar buffer, bf_4
-declare-new-buffer
+# status bar buffer
+declare-buffer status
 	:: line 1
 	:: column 0
 	:: mode empty
 	:: syntax syntax-status
-	:: size-y 0
+	:: size-y 1
 	:: loc-x 1
 	:: loc-y 1
 
@@ -141,18 +149,19 @@ add-mode info
 		:: else :
 		:: disable-global 1
 
-# file info buffer, bf_5
-declare-new-buffer
+# file info buffer
+declare-buffer info
 	:: line 1
 	:: column 0
 	:: mode info
 	:: syntax syntax-format
 	:: syntax-exec 1
+	:: render-type per-char
 
 
 function file-info {
 	local file="${buffer[bf_d[line]]}"
-	set-buffer bf_5
+	set-buffer info
 	clear-buffer
 	get-file-info "$file"
 	redraw
@@ -203,17 +212,17 @@ function get-file-info {
 	
 }
 function info-next {
-	set-buffer bf_2
+	set-buffer files
 	next-file
 	file-info
 }
 function info-previous {
-	set-buffer bf_2
+	set-buffer files
 	previous-file
 	file-info
 }
 function info-quit {
-	set-buffer bf_2
+	set-buffer files
 	redraw
 }
 
@@ -234,18 +243,14 @@ function display-dir {
 	IFS=$'\n'
 	clear-buffer
 	cd "$1" || cd .
-	set-buffer bf_4
+	set-buffer status
 	buffer[1]="$PWD"
 	unset bf_s[1]
  	redraw
-	set-buffer bf_2
+	set-buffer files
 	mapfile -t -O 1 buffer <<< "$(list-directory)"
 	[ -z "${buffer[bf_d[line]]}" ] && bf_d[line]=1
-	redraw-info
 	redraw
-	printf "%b%s" "${faces[file-focus]}" "${buffer[bf_d[line]]}"
-	redraw-cursor-line
-	printf '\e[?25l'
 }
 
 # stolen from fff
@@ -270,9 +275,9 @@ function open {
 				stty echo
 				"${VISUAL:-${EDITOR:-vi}}" "$file"
 				stty -echo
-				set-buffer bf_4; redraw
-				set-buffer bf_3; redraw
-				set-buffer bf_2; redraw
+				set-buffer status; redraw
+				set-buffer pinned; redraw
+				set-buffer files; redraw
 				;;
 
 			*)
@@ -295,27 +300,10 @@ function toggle-hidden {
 	display-dir
 }
 
-function redraw-file-buffer {
-	redraw-info
-	redraw-cursor
+function highlight-selected {
 	printf "%b%s" "${faces[file-focus]}" "${buffer[bf_d[line]]}"
-	redraw-cursor-line
+	redraw-line.cursor
 	printf '\e[?25l'
-}
-
-function next-file {
-	((bf_d[line]>=${#buffer[@]})) && return
-	printf '\e[?25l'
-	print-buffer-line
-	move-next-line
-	redraw-file-buffer
-}
-function previous-file {
-	((bf_d[line]<=1)) && return
-	printf '\e[?25l'
-	print-buffer-line
-	move-previous-line
-	redraw-file-buffer
 }
 
 function redraw-info {
@@ -325,12 +313,17 @@ function redraw-info {
 	local size
 	[ -f "$file" ] && size="$(du -h "$file" | cut -f1)"
 	[ -d "$file" ] && size="/($(cd "$file" 2> /dev/null && list-directory | wc -l))"
-	printf '\e[%d;%dH%b%*s\r%s %b%s%b %s\e[m'\
+
+	# WHY THE FUCK DOES THIS ERROR WITH INVALID NUMBER IF PUT TOGETHER AS ONE PRINTF??????????????
+	# no seriously whyyyyyy
+	printf '\e[%d;%dH'\
 		   $LINES\
-		   0\
+		   0
+	printf '%b%*s\r'\
 		   "${faces[info-line]}"\
 		   $COLUMNS\
-		   ''\
+		   ''
+	printf '%s %b%s%b %s\e[m'\
 		   "${index}/${total}"\
 		   "${faces[info-line-title]}"\
 		   "$file"\
@@ -357,7 +350,7 @@ function syntax-bffm {
 function dialog {
 	((tmpx=bf_d[column] + bf_d[loc-x],
 	  tmpy=bf_d[line] + bf_d[loc-y] - 1))
-	set-buffer bf_1
+	set-buffer dialog
 	clear-buffer
 	((bf_d[loc-x]=tmpx,
 	  bf_d[loc-y]=tmpy,
@@ -378,28 +371,27 @@ function dialog {
 }
 
 function dialog-return {
-	set-buffer bf_2
+	set-buffer files
 	redraw
-	redraw-file-buffer
 }
 
 function remove {
 	dialog "${buffer[bf_d[line]]}" 'Trash?' remove-file
 }
 function remove-file {
-	set-buffer bf_2
+	set-buffer files
 	mv "${buffer[bf_d[line]]}" /tmp/trash/
 	display-dir .
 }
 
 function pinned {
-	set-buffer bf_3
-	redraw-cursor
+	set-buffer pinned
+	redraw.cursor
 }
 function pinned-select {
 	local item="${buffer[bf_d[line]]}"
 	[ -d "$item" ] || return
-	set-buffer bf_2
+	set-buffer files
 	if [ "$item" != "$PWD" ]; then
 		display-dir "$item"
 	else
@@ -407,11 +399,11 @@ function pinned-select {
 	fi
 }
 function return-file {
-	set-buffer bf_2
+	set-buffer files
 	redraw
 }
 
-set-buffer bf_3
+set-buffer pinned
 length=14
 for item in "${buffer[@]}"; do
 	((length<${#item})) && length=${#item}
@@ -429,36 +421,36 @@ function cleanup {
 function change-size-screen {
 	shopt -s checkwinsize && (:) # WHY THIS HAS TO BE HERE!!?
 	
-	set-buffer bf_4
+	set-buffer status
 	bf_d[size-x]=$COLUMNS
 #	redraw
 	
-	set-buffer bf_2
-	bf_d[size-y]=$((LINES-3))
+	set-buffer files
+	bf_d[size-y]=$((LINES-2))
 	bf_d[loc-y]=2
 	
-	set-buffer bf_3
+	set-buffer pinned
 	length=14
 	for item in "${buffer[@]}"; do
 		((length<${#item})) && length=${#item}
 	done
 	length=$((length+2))
 	bf_d[size-x]=$((length-1))
-	bf_d[size-y]=$((LINES-3))
+	bf_d[size-y]=$((LINES-2))
 	bf_d[loc-y]=2
 	redraw
 	
-	set-buffer bf_2
+	set-buffer files
 	((bf_d[loc-x]=length))
 	((bf_d[size-x]=COLUMNS-length))
 	
-	set-buffer bf_5
+	set-buffer info
 	bf_d[size-x]=$((COLUMNS/2))
-	bf_d[size-y]=$((LINES-3))
+	bf_d[size-y]=$((LINES-2))
 	bf_d[loc-x]=$((COLUMNS/2))
 	bf_d[loc-y]=2
 					  
-	set-buffer bf_2
+	set-buffer files
 	redraw
 }
 
@@ -469,4 +461,4 @@ load-default-config
 init-var
 change-size-screen
 display-dir "${1:-.}"
-main
+input-loop
