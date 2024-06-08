@@ -1,7 +1,8 @@
 #!/bin/bash
-bffm_version="0.3.3"
+bffm_version="0.4"
 
 source buffermaker
+load-default-config
 ## Example of buffermaker tui program
 
 file_faces=(
@@ -18,13 +19,16 @@ file_faces=(
 	archive "$(:weight bold :foreground )"
 	text "$(:weight bold :foreground light-magenta)"
 	
-	info-line "$(:mode inverse :foreground red)"
-	info-line-title "$(:mode inverse :foreground light-red)"
-	status-line "$(:mode inverse :foreground red)"
-	file-focus "$(:mode inverse :foreground red)"
-	file-select "$(:mode inverse :foreground light-red)"
+	info-line "$(:background gray)"
+	info-line-title "$(:mode inverse :background black)"
+	status-line "$(:underline t :weight bold)"
+	file-focus "$(:mode inverse :foreground yellow)"
+	file-select "$(:mode inverse :foreground light-yellow)"
 
-	dialog "$(:mode inverse :foreground red)"
+	dialog "$(:mode inverse :foreground yellow)"
+
+	link "$(:underline t :foreground yellow)"
+
 )
 load-theme file_faces
 
@@ -34,20 +38,22 @@ add-mode dialog
 	:: '[right]' format-right
 	:: '[down]' format-down
 	:: 'RET' link-enter
-	:: "$(kbd C-c)" 'die'
+	:: 'C-c' 'die'
 	mode-options
 		:: else :
 		:: disable-global 1
 
 # dialog buffer
 declare-buffer dialog
-	:: line 1
-	:: column 0
-	:: mode dialog
-	:: syntax syntax-format
-	:: syntax-exec 1
-	:: render-type per-char
-	:: size-y 1
+bf_d+=(		
+	[line]=1
+	[column]=0
+	[mode]=dialog
+	[syntax]=syntax-format
+	[syntax-exec]=1
+	[render-type]=per-char
+	[size-y]=1
+)
 
 add-mode bffm
 	:: '[up]' previous-line
@@ -57,29 +63,53 @@ add-mode bffm
 	:: 'RET' open
 	:: '[next]' 'scroll-down'
 	:: '[prior]' 'scroll-up'
-	:: "$(kbd C-c)" 'die'
+	:: 'C-c' 'die'
+	:: 'C-d' 'debug'
+	
+	:: 'C-n' 'filebf-next'
+	:: 'C-p' 'filebf-prev'
 	:: "$(kbd h)" toggle-hidden
 	:: "$(kbd d)" remove
 	:: "$(kbd a)" set-dir
 	:: "$(kbd p)" pinned
+	:: "$(kbd P)" pinned-hide
 	:: "$(kbd i)" file-info
 	mode-options
 		:: else return
 		:: disable-global 1
-		
-# file list buffer
-declare-buffer files
-bf_d+=(
-	[line]=1
-	[column]=0
-	[mode]=bffm
-	[syntax]=syntax-bffm
-)
-bf_h=(
-	[pre-move]='print-buffer-line'
-	[redraw.cursor pre-redraw]='redraw-info'
-	[redraw.cursor post-redraw]='highlight-selected'
-)
+
+filebfs=()
+filebf_count=0
+function file-buffer-create {
+	# file list buffer
+	filebf_focused=$filebf_count
+	declare-buffer "filebf_${filebf_focused}"
+	bf_d+=(
+		[line]=1
+		[column]=0
+		[mode]=bffm
+		[syntax]=syntax-bffm
+	)
+	bf_h=(
+		[pre-move]='print-buffer-line'
+		[redraw.cursor pre-redraw]='redraw-info'
+		[redraw.cursor post-redraw]='highlight-selected'
+	)
+	filebfs+=("filebf_${filebf_focused}")
+	((filebf_count++))
+}
+function filebf-next {
+	((filebf_focused+1<filebf_count))  && {
+		((filebf_focused++))
+		redraw-filebfs
+	}
+}
+function filebf-prev {
+	((filebf_focused>0)) && {
+		((filebf_focused--))
+		redraw-filebfs
+	}
+}
 
 add-mode pinned
 	:: '[up]' previous-line
@@ -88,18 +118,22 @@ add-mode pinned
 	:: 'RET' pinned-select
 	:: '[next]' 'scroll-down'
 	:: '[prior]' 'scroll-up'
-	:: "$(kbd C-c)" 'die'
+	:: "$(kbd p)" pinned-hide
+	:: "$(kbd P)" pinned-hide
+	:: 'C-c' 'die'
 	mode-options
 		:: else return
 		:: disable-global 1
 	
 # pinned list buffer
 declare-buffer pinned
-	:: line 1
-	:: column 0
-	:: mode pinned
-	:: syntax syntax-bffm
-	:: loc-x 1
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=pinned
+	[syntax]=syntax-bffm
+	[loc-x]=1
+)
 
 [ -f "${HOME}/.config/user-dirs.dirs" ] && source "${HOME}/.config/user-dirs.dirs"
 buffer=(
@@ -119,16 +153,26 @@ buffer=(
 	"/media"
 )
 
+buffer+=("MOUNTS")
+findmnt -o TARGET --real --uniq --pairs | while read -r line; do
+	eval "$line"
+	buffer+=("$TARGET")
+done
+
+#findmnt -o TARGET --real --list --uniq | mapfile -O ${#buffer[@]} -t buffer
+
 
 # status bar buffer
 declare-buffer status
-	:: line 1
-	:: column 0
-	:: mode empty
-	:: syntax syntax-status
-	:: size-y 1
-	:: loc-x 1
-	:: loc-y 1
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=empty
+	[syntax]=syntax-status
+	[size-y]=1
+	[loc-x]=1
+	[loc-y]=1
+)
 
 buffer=(
 	''
@@ -144,19 +188,104 @@ add-mode info
 	:: "$(kbd n)" 'info-next'
 	:: "$(kbd p)" 'info-previous'
 	:: "$(kbd q)" 'info-quit'
-	:: "$(kbd C-c)" 'die'
+	:: 'C-c' 'die'
 	mode-options
 		:: else :
 		:: disable-global 1
 
 # file info buffer
 declare-buffer info
-	:: line 1
-	:: column 0
-	:: mode info
-	:: syntax syntax-format
-	:: syntax-exec 1
-	:: render-type per-char
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=info
+	[syntax]=syntax-format
+	[syntax-exec]=1
+	[render-type]=per-char
+)
+
+add-mode debug
+	:: '[left]' format-left
+	:: '[up]' format-up
+	:: '[right]' format-right
+	:: '[down]' format-down
+	:: 'RET' link-enter
+	:: 'C-c' die
+	:: "$(kbd q)" debug-quit
+
+# debug buffer
+declare-buffer debug
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=info
+	[syntax]=syntax-format
+	[syntax-exec]=1
+	[render-type]=per-char
+)
+buffer=(
+	''
+	'<link> debug-quit : Quit </link>'
+	'<h> Debug info </h>'
+	''
+	'<-> <f> title Bffm </f>        <v> bffm_version'
+	'<-> <f> title Buffermaker </f> <v> buffermaker_version'
+	'<-> <f> title Bash </f>        <v> BASH_VERSION'
+	''
+	'<h> Variables </h>'
+	''
+	'<-> <ch> options[display-dotfiles] </ch> options[display-dotfiles] - Whether to display dotfiles'
+	''
+	'<h> Buffer </h> <a> menu bufferlist : <f> menu <v> selected_buffer </f> </a>'
+	''
+	'<-> <link> debug-bf-set set-linenum : set-linenum </link>'
+	'<-> <link> debug-bf-set unset-linenum : unset-linenum </link>'
+)
+selected_buffer=debug
+
+bufferlist=(
+	text: Select buffer
+		face: menu-highlight
+		cmd: menu.exit
+	text: dialog
+		cmd: debug-select-buffer dialog
+	text: files
+		cmd: debug-select-buffer files
+	text: pinned
+		cmd: debug-select-buffer pinned
+	text: status
+		cmd: debug-select-buffer status
+	text: info
+		cmd: debug-select-buffer info
+	text: debug
+		cmd: debug-select-buffer debug
+		face: menu-divider
+	text: Close
+		cmd: menu.exit
+)
+menu.add bufferlist
+function debug-select-buffer {
+	selected_buffer="$1"
+	menu.exit
+	make-render-line 12
+	redraw
+}
+function debug-bf-set {
+	set-buffer "$selected_buffer"
+	"$1"
+	set-buffer debug
+	redraw
+}
+
+function debug-quit {
+	change-size-screen
+	display-dir
+}
+function debug {
+	set-buffer debug
+	redraw
+}
+
 
 
 function file-info {
@@ -170,15 +299,14 @@ function file-info {
 function get-file-info {
 	buffer=(
 		''
-'<o> id: next select: info-next up: : left: : right: obj previous text: <f> button <f> link N </f-> ext </f> </o> '\
-'<o> id: previous select: info-previous up: : left: obj next right: obj quit text: <f> button <f> link P </f-> revious </f> </o> '\
-'<o> id: quit select: info-quit up: : left: obj previous right: : text: <f> button <f> link Q </f-> uit </f> </o>'
-		''
-		"<f> title $1 </f>"
+'<o> id: next select: info-next up: : left: : right: obj previous text: <f> action <f> link N </f-> ext </f> </o> '\
+'<o> id: previous select: info-previous up: : left: obj next right: obj quit text: <f> action <f> link P </f-> revious </f> </o> '\
+'<o> id: quit select: info-quit up: : left: obj previous right: : text: <f> action <f> link Q </f-> uit </f> </o>'
+		"<f> divider <lp> &line x/2-s/2 <f> title $1 </f> </lp> <> <lp> &line x/2-s[-2]/2 </lp> </f>"
 		''
 		"<-> $(file -b "$1")"
 		''
-		"size <f> title $(du -h "$1" | cut -f1) </f>"
+		"size <f> title $(du -h -- "$1" | cut -f1) </f>"
 	)
 	[ -f "$file" ] &&
 		buffer+=("lines <f> title $(wc -l < "$1") </f> words <f> title $(wc -w < "$1") </f> chars <f> title $(wc -m < "$1") </f>")
@@ -191,6 +319,7 @@ function get-file-info {
 		"last modifiction $(stat -c %y "$1")"
 		"last status change $(stat -c %z "$1")"
 		''
+		'<f> divider <lp> &line x </lp> </f>'
 	)
 	[ -b "$1" ] && buffer+=("<f> dim block special </f>")
 	[ -c "$1" ] && buffer+=("<f> dim char special </f>")
@@ -212,17 +341,17 @@ function get-file-info {
 	
 }
 function info-next {
-	set-buffer files
-	next-file
+	set-buffer "filebf_${filebf_focused}"
+	next-line
 	file-info
 }
 function info-previous {
-	set-buffer files
-	previous-file
+	set-buffer "filebf_${filebf_focused}"
+	previous-line
 	file-info
 }
 function info-quit {
-	set-buffer files
+	set-buffer "filebf_${filebf_focused}"
 	redraw
 }
 
@@ -239,17 +368,21 @@ function set-dir {
 	display-dir "$dir"
 }
 
-function display-dir {
+function init-dir {
 	IFS=$'\n'
 	clear-buffer
 	cd "$1" || cd .
 	set-buffer status
-	buffer[1]="$PWD"
+	buffer[1]="[${filebf_focused}] $PWD"
 	unset bf_s[1]
  	redraw
-	set-buffer files
+	set-buffer "filebf_${filebf_focused}"
 	mapfile -t -O 1 buffer <<< "$(list-directory)"
 	[ -z "${buffer[bf_d[line]]}" ] && bf_d[line]=1
+}
+
+function display-dir {
+	init-dir "$@"
 	redraw
 }
 
@@ -277,7 +410,7 @@ function open {
 				stty -echo
 				set-buffer status; redraw
 				set-buffer pinned; redraw
-				set-buffer files; redraw
+				set-buffer "filebf_${filebf_focused}"; redraw
 				;;
 
 			*)
@@ -296,7 +429,7 @@ function dir-up {
 }
 
 function toggle-hidden {
-	((hidden==0)) && hidden=1 || hidden=0
+	((options[display-dotfiles]==0)) && options[display-dotfiles]=1 || options[display-dotfiles]=0
 	display-dir
 }
 
@@ -311,7 +444,7 @@ function redraw-info {
 	local -i total=${#buffer[@]}
 	local -i index=${bf_d[line]}
 	local size
-	[ -f "$file" ] && size="$(du -h "$file" | cut -f1)"
+	[ -f "$file" ] && size="$(du -h -- "$file" | cut -f1)"
 	[ -d "$file" ] && size="/($(cd "$file" 2> /dev/null && list-directory | wc -l))"
 
 	# WHY THE FUCK DOES THIS ERROR WITH INVALID NUMBER IF PUT TOGETHER AS ONE PRINTF??????????????
@@ -371,7 +504,7 @@ function dialog {
 }
 
 function dialog-return {
-	set-buffer files
+	set-buffer "filebf_${filebf_focused}"
 	redraw
 }
 
@@ -379,19 +512,29 @@ function remove {
 	dialog "${buffer[bf_d[line]]}" 'Trash?' remove-file
 }
 function remove-file {
-	set-buffer files
+	set-buffer "filebf_${filebf_focused}"
 	mv "${buffer[bf_d[line]]}" /tmp/trash/
 	display-dir .
 }
 
 function pinned {
+	((show_pinned==0)) && {
+		show_pinned=1
+		change-size-screen
+	}
 	set-buffer pinned
 	redraw.cursor
 }
+function pinned-hide {
+	set-buffer "filebf_${filebf_focused}"
+	show_pinned=0
+	change-size-screen
+}
+
 function pinned-select {
 	local item="${buffer[bf_d[line]]}"
 	[ -d "$item" ] || return
-	set-buffer files
+	set-buffer "filebf_${filebf_focused}"
 	if [ "$item" != "$PWD" ]; then
 		display-dir "$item"
 	else
@@ -399,7 +542,7 @@ function pinned-select {
 	fi
 }
 function return-file {
-	set-buffer files
+	set-buffer "filebf_${filebf_focused}"
 	redraw
 }
 
@@ -412,53 +555,95 @@ length=$((length+2))
 bf_d[size-x]="$length"
 
 stty -echo
-on_die='cleanup'
-function cleanup {
-	stty echo
-}
+hooks[die]='stty echo'
+
+# file info buffer
+declare-buffer separator
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=none
+	[syntax]=syntax-none
+	[render-type]=per-word
+	[background]=info-line
+)
+buffer=(
+	''
+	''
+)
 
 ## layout manager
-function change-size-screen {
-	shopt -s checkwinsize && (:) # WHY THIS HAS TO BE HERE!!?
-	
-	set-buffer status
-	bf_d[size-x]=$COLUMNS
-#	redraw
-	
-	set-buffer files
-	bf_d[size-y]=$((LINES-2))
-	bf_d[loc-y]=2
-	
-	set-buffer pinned
-	length=14
-	for item in "${buffer[@]}"; do
-		((length<${#item})) && length=${#item}
+# default variables
+show_pinned=0
+
+function redraw-filebfs {
+	local -i split=$(( (bf_d[size-x]=COLUMNS-length) / ${#filebfs[@]}))
+	local -i step=$((length+1))
+	for bf in "${filebfs[@]}"; do
+		set-buffer "${bf}"
+		bf_d[size-y]=$((LINES-2))
+		bf_d[loc-y]=2
+		((bf_d[loc-x]=step))
+		[ "$bf" = "filebf_${filebf_focused}" ] && ((status_loc=step))
+		((bf_d[size-x]=split))
+		((step+=split))
+		
+		[ "$bf" = "filebf_${filebf_focused}" ] && continue
+		redraw
 	done
-	length=$((length+2))
-	bf_d[size-x]=$((length-1))
-	bf_d[size-y]=$((LINES-2))
-	bf_d[loc-y]=2
+
+	printf "\e[0m\e[0;${length}H%*s" $((LINES-length)) ''
+	set-buffer status
+	bf_d[size-x]=$((COLUMNS-status_loc))
+	bf_d[loc-x]=$status_loc
 	redraw
 	
-	set-buffer files
-	((bf_d[loc-x]=length))
-	((bf_d[size-x]=COLUMNS-length))
+	set-buffer "filebf_${filebf_focused}"
+	redraw
+}
+function change-size-screen {
+	shopt -s checkwinsize && (:) # WHY THIS HAS TO BE HERE!!?
+	clear-screen
+	length=0
+	((show_pinned==1)) && {
+		set-buffer pinned
+		for item in "${buffer[@]}"; do
+			((length<${#item})) && length=${#item}
+		done
+		length=$((length+2))
+		bf_d[size-x]=$((length-1))
+		bf_d[size-y]=$((LINES-1))
+		bf_d[loc-y]=1
+		redraw
+
+		set-buffer separator
+		bf_d[loc-x]=$length
+		bf_d[size-x]=1
+		bf_d[size-y]=$((LINES-1))
+		bf_d[loc-y]=1
+		redraw
+	}
 	
 	set-buffer info
 	bf_d[size-x]=$((COLUMNS/2))
 	bf_d[size-y]=$((LINES-2))
 	bf_d[loc-x]=$((COLUMNS/2))
 	bf_d[loc-y]=2
-					  
-	set-buffer files
-	redraw
+	
+	redraw-filebfs
 }
 
 [ -d /tmp/trash/ ] || mkdir /tmp/trash
 
-load-default-config
 
 init-var
+file-buffer-create
+file-buffer-create
+filebf_focused=0
+set-buffer "filebf_${filebf_focused}"
+init-dir "${1:-.}"
+filebf_focused=1
+set-buffer "filebf_${filebf_focused}"
+init-dir "${1:-.}"
 change-size-screen
-display-dir "${1:-.}"
 input-loop
