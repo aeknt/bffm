@@ -26,7 +26,13 @@ file_faces=(
 	file-select "$(:mode inverse :foreground light-yellow)"
 
 	dialog "$(:mode inverse :foreground yellow)"
+	
+	border "$(:foreground gray :background yellow :weight bold :mode inverse)"
+	button-hint "$(:weight bold :background gray :foreground white)"
+	button "$(:background gray :foreground white)"
 
+	hint-item "$(:mode inverse)"
+	
 	link "$(:underline t :foreground yellow)"
 
 )
@@ -74,6 +80,19 @@ add-mode bffm
 	:: "$(kbd p)" pinned
 	:: "$(kbd P)" pinned-hide
 	:: "$(kbd i)" file-info
+
+	:: [f1] f-help
+	:: [f2] f-menu
+	:: [f3] f-search
+	:: [f4] f-create
+	:: [f5] open
+	:: [f6] remove
+	:: [f7] f-move
+	:: [f8] f-copy
+	:: [f9] f-permission
+	:: [f10] die
+	:: [f11] file-info
+	:: [f12] f-fsmenu
 	mode-options
 		:: else return
 		:: disable-global 1
@@ -179,30 +198,6 @@ buffer=(
 	"$PWD"
 )
 
-add-mode info
-	:: '[left]' format-left
-	:: '[up]' format-up
-	:: '[right]' format-right
-	:: '[down]' format-down
-	:: 'RET' link-enter
-	:: "$(kbd n)" 'info-next'
-	:: "$(kbd p)" 'info-previous'
-	:: "$(kbd q)" 'info-quit'
-	:: 'C-c' 'die'
-	mode-options
-		:: else :
-		:: disable-global 1
-
-# file info buffer
-declare-buffer info
-bf_d+=(
-	[line]=1
-	[column]=0
-	[mode]=info
-	[syntax]=syntax-format
-	[syntax-exec]=1
-	[render-type]=per-char
-)
 
 add-mode debug
 	:: '[left]' format-left
@@ -287,10 +282,61 @@ function debug {
 }
 
 
+add-mode info
+	:: '[left]' format-left
+	:: '[up]' format-up
+	:: '[right]' format-right
+	:: '[down]' format-down
+	:: 'RET' link-enter
+	:: "$(kbd n)" 'info-next'
+	:: "$(kbd p)" 'info-previous'
+	:: "$(kbd q)" 'info-quit'
+	:: 'C-c' 'die'
+	mode-options
+		:: else :
+		:: disable-global 1
+
+# file info buffer
+declare-buffer info
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=info
+	[syntax]=syntax-format
+	[syntax-exec]=1
+	[render-type]=per-char
+)
+declare-buffer infobg
+bf_d+=(
+	[mode]=empty
+	[syntax]=syntax-none
+	[syntax-exec]=0
+	[render-type]=per-word
+	[background]=border
+)
+buffer=(
+	''
+	'File properties'
+)
+
 
 function file-info {
 	local file="${buffer[bf_d[line]]}"
+
+	set-buffer infobg
+	bf_d[size-x]=$((COLUMNS/2+2))
+	bf_d[size-y]=$((LINES/2+2))
+	bf_d[loc-x]=$((COLUMNS/4-1))
+	bf_d[loc-y]=$((LINES/4-1))
+	redraw
+	
 	set-buffer info
+	bf_d[size-x]=$((COLUMNS/2))
+	bf_d[size-y]=$((LINES/2))
+	bf_d[loc-x]=$((COLUMNS/4))
+	bf_d[loc-y]=$((LINES/4))
+#	set-linenum
+	
 	clear-buffer
 	get-file-info "$file"
 	redraw
@@ -299,9 +345,10 @@ function file-info {
 function get-file-info {
 	buffer=(
 		''
-'<o> id: next select: info-next up: : left: : right: obj previous text: <f> action <f> link N </f-> ext </f> </o> '\
-'<o> id: previous select: info-previous up: : left: obj next right: obj quit text: <f> action <f> link P </f-> revious </f> </o> '\
-'<o> id: quit select: info-quit up: : left: obj previous right: : text: <f> action <f> link Q </f-> uit </f> </o>'
+		''
+' <o> id: next select: info-next up: : left: : right: obj previous text: <f> button <f> button-hint N </f-> ext </f> </o> '\
+'<o> id: previous select: info-previous up: : left: obj next right: obj quit text: <f> button <f> button-hint P </f-> revious </f> </o> '\
+'<o> id: quit select: info-quit up: : left: obj previous right: : text: <f> button <f> button-hint Q </f-> uit </f> </o>'
 		"<f> divider <lp> &line x/2-s/2 <f> title $1 </f> </lp> <> <lp> &line x/2-s[-2]/2 </lp> </f>"
 		''
 		"<-> $(file -b "$1")"
@@ -352,7 +399,7 @@ function info-previous {
 }
 function info-quit {
 	set-buffer "filebf_${filebf_focused}"
-	redraw
+	change-size-screen
 }
 
 
@@ -459,7 +506,7 @@ function redraw-info {
 	# WHY THE FUCK DOES THIS ERROR WITH INVALID NUMBER IF PUT TOGETHER AS ONE PRINTF??????????????
 	# no seriously whyyyyyy
 	printf '\e[%d;%dH'\
-		   $LINES\
+		   $((LINES-2))\
 		   0
 	printf '%b%*s\r'\
 		   "${faces[info-line]}"\
@@ -580,6 +627,85 @@ buffer=(
 	''
 	''
 )
+declare-buffer hintmenu
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=info
+	[syntax]=syntax-format
+	[syntax-exec]=1
+	[render-type]=per-char
+)
+buffer=(
+	''
+	' <f> hint-item <f> reset F1 </f-> Help </f>'\
+' <f> hint-item <f> reset F2 </f-> Menu </f>'\
+' <f> hint-item <f> reset F3 </f-> Search </f>'\
+' <f> hint-item <f> reset F4 </f-> Create </f>'\
+' <f> hint-item <f> reset F5 </f-> Open </f>'\
+' <f> hint-item <f> reset F6 </f-> Remove </f>'\
+' <f> hint-item <f> reset F7 </f-> Move </f>'\
+' <f> hint-item <f> reset F8 </f-> Copy </f>'\
+' <f> hint-item <f> reset F9 </f-> Permission </f>'\
+' <f> hint-item <f> reset F10 </f-> Quit </f>'\
+' <f> hint-item <f> reset F11 </f-> Info </f>'\
+' <f> hint-item <f> reset F12 </f-> Filesystems </f>'
+)
+
+function f-help {
+	msg-redraw '<f> red Help not implemented yet! </f>'
+}
+function f-menu {
+	msg-redraw '<f> red Menu not implemented yet! </f>'
+}
+function f-search {
+	msg-redraw '<f> red Search not implemented yet! </f>'
+}
+function f-create {
+	msg-redraw '<f> red Create not implemented yet! </f>'
+}
+function f-move {
+	msg-redraw '<f> red Move not implemented yet! </f>'
+}
+function f-copy {
+	msg-redraw '<f> red Copy not implemented yet! </f>'
+}
+function f-permission {
+	msg-redraw '<f> red Permissions not implemented yet! </f>'
+}
+function f-fsmenu {
+	msg-redraw '<f> red Filesystem menu not implemented yet! </f>'
+}
+
+declare-buffer message
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=info
+	[syntax]=syntax-format
+	[syntax-exec]=1
+	[render-type]=per-char
+)
+buffer=(
+	''
+	'<message area>'
+)
+function msg {
+	local returnto="$current_buffer"
+	set-buffer message
+	buffer[1]="$*"
+	bf_s[1]=''
+	set-buffer "$returnto"
+}
+function msg-redraw {
+	local returnto="$current_buffer"
+	set-buffer message
+	buffer[1]="$*"
+	bf_s[1]=''
+	redraw
+	set-buffer "$returnto"
+	redraw
+}
 
 ## layout manager
 # default variables
@@ -590,7 +716,7 @@ function redraw-filebfs {
 	local -i step=$((length+1))
 	for bf in "${filebfs[@]}"; do
 		set-buffer "${bf}"
-		bf_d[size-y]=$((LINES-2))
+		bf_d[size-y]=$((LINES-4))
 		bf_d[loc-y]=2
 		((bf_d[loc-x]=step))
 		[ "$bf" = "filebf_${filebf_focused}" ] && ((status_loc=step))
@@ -633,13 +759,21 @@ function change-size-screen {
 		bf_d[loc-y]=1
 		redraw
 	}
+
+	set-buffer message
+	bf_d[loc-x]=0
+	bf_d[size-x]=$COLUMNS
+	bf_d[size-y]=1
+	bf_d[loc-y]=$((LINES-1))
+	redraw
 	
-	set-buffer info
-	bf_d[size-x]=$((COLUMNS/2))
-	bf_d[size-y]=$((LINES-2))
-	bf_d[loc-x]=$((COLUMNS/2))
-	bf_d[loc-y]=2
-	
+	set-buffer hintmenu
+	bf_d[loc-x]=0
+	bf_d[size-x]=$COLUMNS
+	bf_d[size-y]=1
+	bf_d[loc-y]=$LINES
+	redraw
+		
 	redraw-filebfs
 }
 
@@ -649,11 +783,12 @@ function change-size-screen {
 init-var
 file-buffer-create
 file-buffer-create
-filebf_focused=0
-set-buffer "filebf_${filebf_focused}"
-init-dir "${1:-.}"
 filebf_focused=1
 set-buffer "filebf_${filebf_focused}"
 init-dir "${1:-.}"
+filebf_focused=0
+set-buffer "filebf_${filebf_focused}"
+init-dir "${1:-.}"
+msg "<f> menu BFFM </f> <f> yellow <v> bffm_version </f>"
 change-size-screen
 input-loop
