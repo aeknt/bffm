@@ -1,5 +1,5 @@
 #!/bin/bash
-bffm_version="0.4"
+bffm_version="0.4.1"
 
 source buffermaker
 load-default-config
@@ -377,8 +377,17 @@ function init-dir {
 	unset bf_s[1]
  	redraw
 	set-buffer "filebf_${filebf_focused}"
+	bf_d[dir]="$PWD"
 	mapfile -t -O 1 buffer <<< "$(list-directory)"
 	[ -z "${buffer[bf_d[line]]}" ] && bf_d[line]=1
+}
+function focus-dir {
+	cd "${bf_d[dir]}" || cd .
+	set-buffer status
+	buffer[1]="[${filebf_focused}] $PWD"
+	unset bf_s[1]
+ 	redraw
+	set-buffer "filebf_${filebf_focused}"
 }
 
 function display-dir {
@@ -599,6 +608,7 @@ function redraw-filebfs {
 	redraw
 	
 	set-buffer "filebf_${filebf_focused}"
+	focus-dir
 	redraw
 }
 function change-size-screen {
