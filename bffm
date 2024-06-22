@@ -1,5 +1,5 @@
 #!/bin/bash
-bffm_version="0.4.1"
+bffm_version="0.4.2"
 
 source buffermaker
 load-default-config
@@ -385,8 +385,8 @@ function get-file-info {
 	[ -u "$1" ] && buffer+=("<f> dim set-user-ID </f>")
 	[ -w "$1" ] && buffer+=("<f> dim write permission granted </f>")
 	[ -x "$1" ] && buffer+=("<f> dim execute/search granted </f>")
-	
 }
+
 function info-next {
 	set-buffer "filebf_${filebf_focused}"
 	next-line
@@ -402,6 +402,173 @@ function info-quit {
 	change-size-screen
 }
 
+
+add-mode permissions
+	:: '[left]' format-left
+	:: '[up]' format-up
+	:: '[right]' format-right
+	:: '[down]' format-down
+	:: 'RET' link-enter
+	:: 'C-c' 'die'
+	mode-options
+		:: else :
+		:: disable-global 1
+
+# file info buffer
+declare-buffer permissions
+bf_d+=(
+	[line]=1
+	[column]=0
+	[mode]=info
+	[syntax]=syntax-format
+	[syntax-exec]=1
+	[render-type]=per-char
+)
+declare-buffer permissionsbg
+bf_d+=(
+	[mode]=empty
+	[syntax]=syntax-none
+	[syntax-exec]=0
+	[render-type]=per-word
+	[background]=border
+)
+buffer=(
+	''
+	'Permissions'
+)
+
+
+function f-permission {
+	local file="${buffer[bf_d[line]]}"
+
+	set-buffer permissionsbg
+	bf_d[size-x]=$((COLUMNS/2+2))
+	bf_d[size-y]=$((LINES/2+2))
+	bf_d[loc-x]=$((COLUMNS/4-1))
+	bf_d[loc-y]=$((LINES/4-1))
+	redraw
+	
+	set-buffer permissions
+	bf_d[size-x]=$((COLUMNS/2))
+	bf_d[size-y]=$((LINES/2))
+	bf_d[loc-x]=$((COLUMNS/4))
+	bf_d[loc-y]=$((LINES/4))
+#	set-linenum
+	
+	clear-buffer
+	get-permissions "$file"
+	redraw
+	obj quit
+}
+function get-permissions {
+	buffer=(
+		''
+		''
+' <o> id: next select: info-next up: : left: : right: obj previous text: <f> button <f> button-hint N </f-> ext </f> </o> '\
+'<o> id: previous select: info-previous up: : left: obj next right: obj quit text: <f> button <f> button-hint P </f-> revious </f> </o> '\
+'<o> id: quit select: info-quit up: : left: obj previous right: : text: <f> button <f> button-hint Q </f-> uit </f> </o>'
+		"<f> divider <lp> &line x/2-s/2 <f> title $1 </f> </lp> <> <lp> &line x/2-s[-2]/2 </lp> </f>"
+		''
+		"<-> owner <f> title $(stat -c %U "$1") </f> (group <f> title $(stat -c %G "$1") <-f> default ) </f> </f>"
+	)
+	perms="$(stat -c %a "$1")"
+	
+	if ((${perms:0:1}==7))
+	then read_o=1 write_o=1 exec_o=1
+	elif ((${perms:0:1}==6))
+	then read_o=1 write_o=1 exec_o=0
+	elif ((${perms:0:1}==5))
+	then read_o=1 write_o=0 exec_o=1
+	elif ((${perms:0:1}==4))
+	then read_o=1 write_o=0 exec_o=0
+	elif ((${perms:0:1}==3))
+	then read_o=0 write_o=1 exec_o=1
+	elif ((${perms:0:1}==2))
+	then read_o=0 write_o=1 exec_o=0
+	else read_o=0 write_o=0 exec_o=0
+	fi
+
+	if ((${perms:1:1}==7))
+	then read_g=1 write_g=1 exec_g=1
+	elif ((${perms:1:1}==6))
+	then read_g=1 write_g=1 exec_g=0
+	elif ((${perms:1:1}==5))
+	then read_g=1 write_g=0 exec_g=1
+	elif ((${perms:1:1}==4))
+	then read_g=1 write_g=0 exec_g=0
+	elif ((${perms:1:1}==3))
+	then read_g=0 write_g=1 exec_g=1
+	elif ((${perms:1:1}==2))
+	then read_g=0 write_g=1 exec_g=0
+	else read_g=0 write_g=0 exec_g=0
+	fi
+
+	if ((${perms:2:1}==7))
+	then read_w=1 write_w=1 exec_w=1
+	elif ((${perms:2:1}==6))
+	then read_w=1 write_w=1 exec_w=0
+	elif ((${perms:2:1}==5))
+	then read_w=1 write_w=0 exec_w=1
+	elif ((${perms:2:1}==4))
+	then read_w=1 write_w=0 exec_w=0
+	elif ((${perms:2:1}==3))
+	then read_w=0 write_w=1 exec_w=1
+	elif ((${perms:2:1}==2))
+	then read_w=0 write_w=1 exec_w=0
+	else read_w=0 write_w=0 exec_w=0
+	fi
+
+	declare -g perm_file="$1"
+	buffer+=(
+		"<-> permissions <f> title $(stat -c %A "$1") </f>"
+		"<-> permissions <f> title $(stat -c %a "$1") </f>"
+		''
+		'<-> <ch> read_o </ch> read owner <-> <ch> write_o </ch> write owner <-> <ch> exec_o </ch> exec owner'
+		'<-> <ch> read_g </ch> read group <-> <ch> write_g </ch> write group <-> <ch> exec_g </ch> exec group'
+		'<-> <ch> read_w </ch> read world <-> <ch> write_w </ch> write world <-> <ch> exec_w </ch> exec world'
+		''
+		' <o> id: apply select: perm-apply text: <f> button <f> button-hint A </f-> pply </f> </o>'
+		'<f> divider <lp> &line x </lp> </f>'
+	)
+	[ -b "$1" ] && buffer+=("<f> dim block special </f>")
+	[ -c "$1" ] && buffer+=("<f> dim char special </f>")
+	[ -e "$1" ] && buffer+=("<f> dim exists </f>")
+	[ -d "$1" ] && buffer+=("<f> dim dir </f>")
+	[ -f "$1" ] && buffer+=("<f> dim regular </f>")
+	[ -g "$1" ] && buffer+=("<f> dim set-group-ID </f>")
+	[ -G "$1" ] && buffer+=("<f> dim owner by effective group-ID </f>")
+	[ -L "$1" ] && buffer+=("<f> dim symlink")
+	[ -k "$1" ] && buffer+=("<f> dim sticky")
+	[ -O "$1" ] && buffer+=("<f> dim owned by effective user-id </f>")
+	[ -p "$1" ] && buffer+=("<f> dim named pipe </f>")
+	[ -r "$1" ] && buffer+=("<f> dim read permission </f>")
+	[ -s "$1" ] && buffer+=("<f> dim size greater 0 </f>")
+	[ -S "$1" ] && buffer+=("<f> dim socket </f>")
+	[ -u "$1" ] && buffer+=("<f> dim set-user-ID </f>")
+	[ -w "$1" ] && buffer+=("<f> dim write permission granted </f>")
+	[ -x "$1" ] && buffer+=("<f> dim execute/search granted </f>")
+	
+}
+function perm-apply {
+	local -i owner=0
+	local -i group=0
+	local -i world=0
+	
+	((write_o)) && owner+=2
+	((read_o)) && owner+=4
+	((exec_o)) && owner+=1
+	
+	((write_g)) && group+=2
+	((read_g)) && group+=4
+	((exec_g)) && group+=1
+
+	((write_w)) && world+=2
+	((read_w)) && world+=4
+	((exec_w)) && world+=1
+
+	chmod "${owner}${group}${world}" "${perm_file}"
+	msg-redraw "applied mode <f> highlight ${owner}${group}${world} </f> to <f> highlight ${perm_file} </f> <f> dim chmod ${owner}${group}${world} ${perm_file} </f>"
+}
 
 function syntax-status {
 	set-face status-line
@@ -669,9 +836,6 @@ function f-move {
 }
 function f-copy {
 	msg-redraw '<f> red Copy not implemented yet! </f>'
-}
-function f-permission {
-	msg-redraw '<f> red Permissions not implemented yet! </f>'
 }
 function f-fsmenu {
 	msg-redraw '<f> red Filesystem menu not implemented yet! </f>'
